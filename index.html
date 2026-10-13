@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Takoz Baba">
+<meta name="theme-color" content="#0b1730">
+<title>Takoz Baba</title>
+<style>
+  :root { --bg: #0b1730; --card: #13244a; --line: #24407a; --text: #eef4ff; --muted: #9db2d8; --cyan: #49d2ff; --green: #2fd27a; --red: #ff4d5e; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  .wrap { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+  header { display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 22px; margin: 0; }
+  header small { color: var(--muted); display: block; font-size: 13px; }
+  .face { width: 56px; height: 56px; border-radius: 18px; background: #06121f; position: relative; flex: none; box-shadow: 0 0 0 2px var(--line); }
+  .face i { position: absolute; top: 17px; width: 13px; height: 17px; border-radius: 8px; background: #fff; }
+  .face i::after { content: ""; position: absolute; left: 4px; top: 5px; width: 6px; height: 7px; border-radius: 4px; background: #0b1730; }
+  .face i:first-child { left: 11px; } .face i:nth-child(2) { right: 11px; }
+  .face b { position: absolute; left: 18px; bottom: 10px; width: 20px; height: 9px; border: 3px solid var(--cyan); border-top: none; border-radius: 0 0 12px 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 18px; }
+  .card h2 { margin: 0 0 8px; font-size: 18px; }
+  .muted { color: var(--muted); font-size: 15px; }
+  ol { margin: 8px 0 0; padding-left: 22px; } li { margin: 6px 0; }
+  code { background: #06121f; border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; font-size: 15px; word-break: break-all; }
+  button { font: inherit; border: none; border-radius: 16px; padding: 14px 18px; color: #fff; background: #24407a; cursor: pointer; }
+  button.big { width: 100%; font-size: 19px; font-weight: 600; padding: 18px; }
+  .green { background: var(--green); } .red { background: var(--red); }
+  .row { display: flex; gap: 12px; } .row > * { flex: 1; }
+  .status { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--green); box-shadow: 0 0 0 4px rgba(47,210,122,.2); }
+  #incoming, #incall { text-align: center; }
+  .ring { width: 140px; height: 140px; margin: 10px auto 18px; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle, #1d3a75 0%, #13244a 70%); animation: pulse 1.2s infinite; }
+  .ring .face { width: 90px; height: 90px; border-radius: 28px; }
+  .ring .face i { top: 27px; width: 20px; height: 27px; border-radius: 12px; } .ring .face i::after { left: 6px; top: 8px; width: 9px; height: 11px; }
+  .ring .face i:first-child { left: 18px; } .ring .face i:nth-child(2) { right: 18px; }
+  .ring .face b { left: 29px; bottom: 15px; width: 32px; height: 14px; border-width: 4px; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(73,210,255,.45); } 70% { box-shadow: 0 0 0 26px rgba(73,210,255,0); } 100% { box-shadow: 0 0 0 0 rgba(73,210,255,0); } }
+  .big-name { font-size: 26px; font-weight: 700; margin: 0; }
+  .timer { font-variant-numeric: tabular-nums; font-size: 34px; margin: 6px 0 18px; }
+  [hidden] { display: none !important; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #06121f; border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="face"><i></i><i></i><b></b></div>
+    <div><h1>Takoz Baba</h1><small id="sub">Tabletten gelen aramalar</small></div>
+  </header>
+
+  <section class="card" id="nosetup" hidden>
+    <h2>Önce tableti bağla</h2>
+    <p class="muted">Bu sayfayı tabletteki Takoz uygulamasında <b>Menü → Baba telefonu</b> ekranındaki QR kodu iPhone kamerasıyla okutarak aç.</p>
+  </section>
+
+  <section class="card" id="setup" hidden>
+    <h2>Bildirim kurulumu (bir kere)</h2>
+    <ol>
+      <li>App Store'dan ücretsiz <b>ntfy</b> uygulamasını indir.</li>
+      <li>ntfy'yi aç, sağ üstteki <b>+</b> düğmesine bas.</li>
+      <li>Konu (topic) olarak şunu yaz: <code id="topicText"></code> <button id="copyBtn" style="padding:6px 12px;font-size:14px;margin-left:4px">Kopyala</button></li>
+      <li><b>Subscribe</b>'a bas, bildirimlere izin ver.</li>
+    </ol>
+    <p class="muted">Tablet seni aradığında ntfy bildirim gönderir; bildirime dokununca bu sayfa açılır ve tek dokunuşla cevaplarsın.</p>
+  </section>
+
+  <section class="card" id="idle" hidden>
+    <div class="status"><span class="dot" id="dot"></span><span id="idleText">Bağlanıyor…</span></div>
+    <p class="muted" style="margin-bottom:0">Bu sayfa açıkken tablet aradığında burada çalar.</p>
+  </section>
+
+  <section class="card" id="incoming" hidden>
+    <div class="ring"><div class="face"><i></i><i></i><b></b></div></div>
+    <p class="big-name"><span id="callerName">Takoz</span> arıyor</p>
+    <p class="muted">Çocuğun seninle konuşmak istiyor</p>
+    <div class="row" style="margin-top:18px">
+      <button class="big red" id="rejectBtn">Reddet</button>
+      <button class="big green" id="acceptBtn">Cevapla</button>
+    </div>
+  </section>
+
+  <section class="card" id="incall" hidden>
+    <p class="big-name" id="incallName">Takoz</p>
+    <p class="muted" id="incallState">Bağlanıyor…</p>
+    <div class="timer" id="timer">00:00</div>
+    <div class="row">
+      <button class="big" id="muteBtn">Sessiz</button>
+      <button class="big red" id="hangBtn">Kapat</button>
+    </div>
+  </section>
+</div>
+<audio id="remote" autoplay playsinline></audio>
+<div class="toast" id="toast" hidden></div>
+<script>(function (root) {
+  'use strict';
+
+  var C = {
+    base: 'https://ntfy.sh',
+    ice: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }]
+  };
+
+  function b64(bytes) {
+    var s = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function unb64(str) {
+    var bin = atob(str), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function streamBytes(stream) {
+    var chunks = [], total = 0, reader = stream.getReader();
+    for (;;) {
+      var r = await reader.read();
+      if (r.done) break;
+      chunks.push(r.value); total += r.value.length;
+    }
+    var out = new Uint8Array(total), off = 0;
+    chunks.forEach(function (c) { out.set(c, off); off += c.length; });
+    return out;
+  }
+  C.pack = async function (text) {
+    if (typeof CompressionStream === 'undefined') return { z: 0, d: text };
+    var cs = new CompressionStream('deflate-raw');
+    var w = cs.writable.getWriter();
+    w.write(new TextEncoder().encode(text)); w.close();
+    return { z: 1, d: b64(await streamBytes(cs.readable)) };
+  };
+  C.unpack = async function (o) {
+    if (!o.z) return o.d;
+    var ds = new DecompressionStream('deflate-raw');
+    var w = ds.writable.getWriter();
+    w.write(unb64(o.d)); w.close();
+    return new TextDecoder().decode(await streamBytes(ds.readable));
+  };
+
+  C.publish = function (topic, obj) {
+    return fetch(C.base + '/' + encodeURIComponent(topic), { method: 'POST', body: JSON.stringify(obj) });
+  };
+
+  C.subscribe = function (topic, since, onMsg) {
+    var closed = false, ws = null, retry = 0;
+    var seen = {};
+    function open(sinceArg) {
+      var url = C.base.replace(/^http/, 'ws') + '/' + encodeURIComponent(topic) + '/ws' + (sinceArg ? '?since=' + encodeURIComponent(sinceArg) : '');
+      ws = new WebSocket(url);
+      ws.onmessage = function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.event !== 'message' || !m.message || seen[m.id]) return;
+        seen[m.id] = 1;
+        var body; try { body = JSON.parse(m.message); } catch (e) { return; }
+        onMsg(body, m);
+      };
+      ws.onopen = function () { retry = 0; };
+      ws.onclose = function () {
+        if (closed) return;
+        retry++;
+        setTimeout(function () { if (!closed) open('2m'); }, Math.min(5000, 400 * retry));
+      };
+    }
+    open(since);
+    return { close: function () { closed = true; try { ws.close(); } catch (e) {} } };
+  };
+
+  C.waitIce = function (pc, ms) {
+    return new Promise(function (res) {
+      if (pc.iceGatheringState === 'complete') return res();
+      var t = setTimeout(res, ms || 2500);
+      pc.addEventListener('icegatheringstatechange', function () {
+        if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); }
+      });
+    });
+  };
+
+  C.mic = function () {
+    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  };
+
+  C.peer = function (onTrack) {
+    var pc = new RTCPeerConnection({ iceServers: C.ice });
+    pc.ontrack = function (e) { if (onTrack) onTrack(e.streams[0] || new MediaStream([e.track])); };
+    return pc;
+  };
+
+  C.id = function () {
+    var a = new Uint8Array(6); crypto.getRandomValues(a);
+    return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  };
+
+  C.dial = function (opts) {
+    var topic = opts.topic, sig = topic + '-sig', id = C.id(), pc = null, stream = null, sub = null, done = false, timer = null;
+    var call = { id: id, state: 'idle' };
+    function set(st, extra) { call.state = st; if (opts.onState) opts.onState(st, extra); }
+    function cleanup() {
+      done = true; clearTimeout(timer);
+      if (sub) sub.close();
+      if (pc) try { pc.close(); } catch (e) {}
+      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+    call.hangup = function (reason) {
+      if (done) return;
+      C.publish(sig, { t: 'bye', id: id, from: 'tablet' }).catch(function () {});
+      cleanup(); set('ended', reason || 'hangup');
+    };
+    (async function () {
+      try {
+        set('starting');
+        stream = await C.mic();
+        call._local = stream;
+        pc = C.peer(opts.onRemote);
+        stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+        pc.onconnectionstatechange = function () {
+          if (done) return;
+          if (pc.connectionState === 'connected') { clearTimeout(timer); set('connected'); }
+          if (pc.connectionState === 'failed') { call.hangup('failed'); }
+          if (pc.connectionState === 'disconnected') {
+            setTimeout(function () { if (!done && pc.connectionState !== 'connected') call.hangup('lost'); }, 6000);
+          }
+        };
+        sub = C.subscribe(sig, null, async function (m) {
+          if (done || m.id !== id || m.from === 'tablet') return;
+          if (m.t === 'answer') {
+            set('answered');
+            try { await pc.setRemoteDescription({ type: 'answer', sdp: await C.unpack({ z: m.z, d: m.s }) }); } catch (e) { call.hangup('error'); }
+          } else if (m.t === 'reject') { cleanup(); set('ended', 'rejected'); }
+          else if (m.t === 'bye') { cleanup(); set('ended', 'remote'); }
+        });
+        var offer = await pc.createOffer({ offerToReceiveAudio: true });
+        await pc.setLocalDescription(offer);
+        await C.waitIce(pc, 2500);
+        if (done) return;
+        var packed = await C.pack(pc.localDescription.sdp);
+        await C.publish(sig, { t: 'offer', id: id, from: 'tablet', n: opts.name || 'Takoz', s: packed.d, z: packed.z, at: Date.now() });
+        set('ringing');
+        if (opts.ring) opts.ring(id);
+        timer = setTimeout(function () { if (!done && call.state !== 'connected') call.hangup('noanswer'); }, opts.timeout || 50000);
+      } catch (e) {
+        cleanup(); set('ended', 'error:' + (e && e.message));
+      }
+    })();
+    return call;
+  };
+
+  C.answer = function (opts) {
+    var topic = opts.topic, sig = topic + '-sig', pc = null, stream = null, done = false, offerMsg = opts.offer;
+    var call = { id: offerMsg.id, state: 'idle' };
+    function set(st, extra) { call.state = st; if (opts.onState) opts.onState(st, extra); }
+    function cleanup() {
+      done = true;
+      if (pc) try { pc.close(); } catch (e) {}
+      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+    call.hangup = function (reason) {
+      if (done) return;
+      C.publish(sig, { t: 'bye', id: call.id, from: 'dad' }).catch(function () {});
+      cleanup(); set('ended', reason || 'hangup');
+    };
+    call.remoteBye = function () { if (!done) { cleanup(); set('ended', 'remote'); } };
+    (async function () {
+      try {
+        set('starting');
+        stream = await C.mic();
+        call._local = stream;
+        pc = C.peer(opts.onRemote);
+        stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+        pc.onconnectionstatechange = function () {
+          if (done) return;
+          if (pc.connectionState === 'connected') set('connected');
+          if (pc.connectionState === 'failed') call.hangup('failed');
+          if (pc.connectionState === 'disconnected') {
+            setTimeout(function () { if (!done && pc.connectionState !== 'connected') call.hangup('lost'); }, 6000);
+          }
+        };
+        await pc.setRemoteDescription({ type: 'offer', sdp: await C.unpack({ z: offerMsg.z, d: offerMsg.s }) });
+        var ans = await pc.createAnswer();
+        await pc.setLocalDescription(ans);
+        await C.waitIce(pc, 2500);
+        if (done) return;
+        var packed = await C.pack(pc.localDescription.sdp);
+        await C.publish(sig, { t: 'answer', id: call.id, from: 'dad', s: packed.d, z: packed.z });
+        set('connecting');
+      } catch (e) {
+        cleanup(); set('ended', 'error:' + (e && e.message));
+      }
+    })();
+    return call;
+  };
+
+  root.TakozCall = C;
+})(this);
+</script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var q = new URLSearchParams(location.search);
+  var topic = q.get('t') || '';
+  try { if (topic) localStorage.setItem('takoz.topic', topic); else topic = localStorage.getItem('takoz.topic') || ''; } catch (e) {}
+  if (/^http:\/\/127\.0\.0\.1/.test(q.get('b') || '')) TakozCall.base = q.get('b');
+  var wantId = q.get('c');
+  var sub = null, call = null, pendingOffer = null, ringer = null, tick = null, startedAt = 0, muted = false, handled = {};
+
+  function show(id) { ['nosetup', 'setup', 'idle', 'incoming', 'incall'].forEach(function (k) { $(k).hidden = k !== id && !(k === 'setup' && id === 'idle' && !setupDone()); }); }
+  function setupDone() { try { return localStorage.getItem('takoz.setupDone') === '1'; } catch (e) { return false; } }
+  function toast(t) { var el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { el.hidden = true; }, 2600); }
+
+  function beep() {
+    try {
+      var ctx = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      [0, 0.25].forEach(function (d) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + d);
+        g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + d + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + d + 0.2);
+        o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.22);
+      });
+    } catch (e) {}
+    if (navigator.vibrate) navigator.vibrate([300, 200, 300]);
+  }
+  function stopRing() { clearInterval(ringer); ringer = null; }
+
+  function onSignal(m) {
+    if (m.t === 'offer') {
+      if (handled[m.id] || call) return;
+      if (m.at && Date.now() - m.at > 70000) return;
+      if (wantId && m.id !== wantId && pendingOffer) return;
+      pendingOffer = m;
+      $('callerName').textContent = m.n || 'Takoz';
+      show('incoming');
+      stopRing(); beep(); ringer = setInterval(beep, 2000);
+      setTimeout(function () { if (pendingOffer === m) { pendingOffer = null; stopRing(); show('idle'); toast('Cevapsız arama'); } }, 60000);
+    } else if (m.t === 'bye') {
+      if (pendingOffer && pendingOffer.id === m.id) { pendingOffer = null; stopRing(); show('idle'); toast('Arama kapandı'); }
+      if (call && call.id === m.id) call.remoteBye();
+    }
+  }
+
+  function startSub() {
+    $('topicText').textContent = topic;
+    show('idle');
+    sub = TakozCall.subscribe(topic + '-sig', '90s', function (m) { if (m.from === 'tablet') onSignal(m); });
+    $('dot').classList.add('on'); $('idleText').textContent = 'Hazır, tablet aramasını bekliyor';
+  }
+
+  $('copyBtn').onclick = function () {
+    try { navigator.clipboard.writeText(topic); toast('Kopyalandı'); } catch (e) {}
+    try { localStorage.setItem('takoz.setupDone', '1'); } catch (e) {}
+  };
+  $('rejectBtn').onclick = function () {
+    if (!pendingOffer) return;
+    handled[pendingOffer.id] = 1;
+    TakozCall.publish(topic + '-sig', { t: 'reject', id: pendingOffer.id, from: 'dad' });
+    pendingOffer = null; stopRing(); show('idle');
+  };
+  $('acceptBtn').onclick = function () {
+    if (!pendingOffer) return;
+    var m = pendingOffer; pendingOffer = null; handled[m.id] = 1; stopRing();
+    $('incallName').textContent = m.n || 'Takoz'; $('incallState').textContent = 'Bağlanıyor…'; $('timer').textContent = '00:00';
+    show('incall');
+    var audio = $('remote');
+    audio.muted = false; try { audio.play(); } catch (e) {}
+    call = TakozCall.answer({
+      topic: topic, offer: m,
+      onRemote: function (s) { audio.srcObject = s; var p = audio.play(); if (p && p.catch) p.catch(function () {}); },
+      onState: function (st, why) {
+        if (st === 'connected') {
+          $('incallState').textContent = 'Konuşuyorsunuz';
+          startedAt = Date.now();
+          clearInterval(tick);
+          tick = setInterval(function () { var s = Math.floor((Date.now() - startedAt) / 1000); $('timer').textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); }, 500);
+        } else if (st === 'ended') {
+          clearInterval(tick); call = null; show('idle');
+          toast(why === 'remote' ? 'Tablet aramayı kapattı' : why === 'failed' || why === 'lost' ? 'Bağlantı koptu' : 'Arama bitti');
+        }
+      }
+    });
+  };
+  $('hangBtn').onclick = function () { if (call) call.hangup(); };
+  $('muteBtn').onclick = function () {
+    muted = !muted;
+    if (call && call._local) call._local.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
+    $('muteBtn').textContent = muted ? 'Sesi aç' : 'Sessiz';
+  };
+
+  if (!topic) { show('nosetup'); return; }
+  startSub();
+  window.__takozBaba = { state: function () { return call ? call.state : pendingOffer ? 'incoming' : 'idle'; }, accept: function () { $('acceptBtn').click(); } };
+})();
+</script>
+</body>
+</html>
