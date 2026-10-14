@@ -51,7 +51,7 @@
 <div class="wrap">
   <header>
     <div class="face"><i></i><i></i><b></b></div>
-    <div><h1>Takoz Baba</h1><small id="sub">Tabletten gelen aramalar</small></div>
+    <div><h1>Takoz Baba</h1><small id="sub">Tabletle sesli görüşme</small></div>
   </header>
 
   <section class="card" id="nosetup" hidden>
@@ -72,7 +72,9 @@
 
   <section class="card" id="idle" hidden>
     <div class="status"><span class="dot" id="dot"></span><span id="idleText">Bağlanıyor…</span></div>
-    <p class="muted" style="margin-bottom:0">Bu sayfa açıkken tablet aradığında burada çalar.</p>
+    <p class="muted">Bu sayfa açıkken tablet aradığında burada çalar.</p>
+    <button class="big green" id="dialBtn">Tableti ara</button>
+    <p class="muted" style="margin:8px 0 0;font-size:13px">Tablette Takoz uygulaması açık olmalı.</p>
   </section>
 
   <section class="card" id="incoming" hidden>
@@ -126,8 +128,14 @@
     chunks.forEach(function (c) { out.set(c, off); off += c.length; });
     return out;
   }
+  function nativeRaw() {
+    try { new CompressionStream('deflate-raw'); new DecompressionStream('deflate-raw'); return true; } catch (e) { return false; }
+  }
   C.pack = async function (text) {
-    if (typeof CompressionStream === 'undefined') return { z: 0, d: text };
+    if (!nativeRaw()) {
+      if (root.pako) return { z: 1, d: b64(root.pako.deflateRaw(new TextEncoder().encode(text))) };
+      return { z: 0, d: text };
+    }
     var cs = new CompressionStream('deflate-raw');
     var w = cs.writable.getWriter();
     w.write(new TextEncoder().encode(text)); w.close();
@@ -135,6 +143,7 @@
   };
   C.unpack = async function (o) {
     if (!o.z) return o.d;
+    if (!nativeRaw() && root.pako) return new TextDecoder().decode(root.pako.inflateRaw(unb64(o.d)));
     var ds = new DecompressionStream('deflate-raw');
     var w = ds.writable.getWriter();
     w.write(unb64(o.d)); w.close();
@@ -179,8 +188,19 @@
     });
   };
 
-  C.mic = function () {
-    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  C.mic = async function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('mikrofon_api_yok');
+    var last = null;
+    for (var i = 0; i < 6; i++) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      } catch (e) {
+        last = e;
+        if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) break;
+        await new Promise(function (r) { setTimeout(r, 700); });
+      }
+    }
+    throw new Error('mikrofon: ' + (last && (last.name + ' ' + last.message)));
   };
 
   C.peer = function (onTrack) {
@@ -195,7 +215,7 @@
   };
 
   C.dial = function (opts) {
-    var topic = opts.topic, sig = topic + '-sig', id = C.id(), pc = null, stream = null, sub = null, done = false, timer = null;
+    var topic = opts.topic, sig = topic + '-sig', id = C.id(), pc = null, stream = null, sub = null, done = false, timer = null, me = opts.from || 'tablet';
     var call = { id: id, state: 'idle' };
     function set(st, extra) { call.state = st; if (opts.onState) opts.onState(st, extra); }
     function cleanup() {
@@ -206,12 +226,13 @@
     }
     call.hangup = function (reason) {
       if (done) return;
-      C.publish(sig, { t: 'bye', id: id, from: 'tablet' }).catch(function () {});
+      C.publish(sig, { t: 'bye', id: id, from: me }).catch(function () {});
       cleanup(); set('ended', reason || 'hangup');
     };
     (async function () {
       try {
         set('starting');
+        if (typeof RTCPeerConnection === 'undefined') throw new Error('webrtc_yok');
         stream = await C.mic();
         call._local = stream;
         pc = C.peer(opts.onRemote);
@@ -225,7 +246,7 @@
           }
         };
         sub = C.subscribe(sig, null, async function (m) {
-          if (done || m.id !== id || m.from === 'tablet') return;
+          if (done || m.id !== id || m.from === me) return;
           if (m.t === 'answer') {
             set('answered');
             try { await pc.setRemoteDescription({ type: 'answer', sdp: await C.unpack({ z: m.z, d: m.s }) }); } catch (e) { call.hangup('error'); }
@@ -237,7 +258,8 @@
         await C.waitIce(pc, 2500);
         if (done) return;
         var packed = await C.pack(pc.localDescription.sdp);
-        await C.publish(sig, { t: 'offer', id: id, from: 'tablet', n: opts.name || 'Takoz', s: packed.d, z: packed.z, at: Date.now() });
+        var pr = await C.publish(sig, { t: 'offer', id: id, from: me, n: opts.name || 'Takoz', s: packed.d, z: packed.z, at: Date.now() });
+        if (pr && pr.ok === false) throw new Error('ntfy ' + pr.status);
         set('ringing');
         if (opts.ring) opts.ring(id);
         timer = setTimeout(function () { if (!done && call.state !== 'connected') call.hangup('noanswer'); }, opts.timeout || 50000);
@@ -249,7 +271,7 @@
   };
 
   C.answer = function (opts) {
-    var topic = opts.topic, sig = topic + '-sig', pc = null, stream = null, done = false, offerMsg = opts.offer;
+    var topic = opts.topic, sig = topic + '-sig', pc = null, stream = null, done = false, offerMsg = opts.offer, me = opts.from || 'dad';
     var call = { id: offerMsg.id, state: 'idle' };
     function set(st, extra) { call.state = st; if (opts.onState) opts.onState(st, extra); }
     function cleanup() {
@@ -259,13 +281,14 @@
     }
     call.hangup = function (reason) {
       if (done) return;
-      C.publish(sig, { t: 'bye', id: call.id, from: 'dad' }).catch(function () {});
+      C.publish(sig, { t: 'bye', id: call.id, from: me }).catch(function () {});
       cleanup(); set('ended', reason || 'hangup');
     };
     call.remoteBye = function () { if (!done) { cleanup(); set('ended', 'remote'); } };
     (async function () {
       try {
         set('starting');
+        if (typeof RTCPeerConnection === 'undefined') throw new Error('webrtc_yok');
         stream = await C.mic();
         call._local = stream;
         pc = C.peer(opts.onRemote);
@@ -284,7 +307,7 @@
         await C.waitIce(pc, 2500);
         if (done) return;
         var packed = await C.pack(pc.localDescription.sdp);
-        await C.publish(sig, { t: 'answer', id: call.id, from: 'dad', s: packed.d, z: packed.z });
+        await C.publish(sig, { t: 'answer', id: call.id, from: me, s: packed.d, z: packed.z });
         set('connecting');
       } catch (e) {
         cleanup(); set('ended', 'error:' + (e && e.message));
@@ -339,7 +362,7 @@
       setTimeout(function () { if (pendingOffer === m) { pendingOffer = null; stopRing(); show('idle'); toast('Cevapsız arama'); } }, 60000);
     } else if (m.t === 'bye') {
       if (pendingOffer && pendingOffer.id === m.id) { pendingOffer = null; stopRing(); show('idle'); toast('Arama kapandı'); }
-      if (call && call.id === m.id) call.remoteBye();
+      if (call && call.id === m.id && call.remoteBye) call.remoteBye();
     }
   }
 
@@ -384,6 +407,29 @@
     });
   };
   $('hangBtn').onclick = function () { if (call) call.hangup(); };
+  $('dialBtn').onclick = function () {
+    if (call || pendingOffer) return;
+    $('incallName').textContent = 'Tablet'; $('incallState').textContent = 'Tablet çalıyor…'; $('timer').textContent = '00:00';
+    show('incall');
+    var audio = $('remote');
+    audio.muted = false; try { audio.play(); } catch (e) {}
+    call = TakozCall.dial({
+      topic: topic, from: 'dad', name: 'Baban', timeout: 55000,
+      onRemote: function (s) { audio.srcObject = s; var p = audio.play(); if (p && p.catch) p.catch(function () {}); },
+      onState: function (st, why) {
+        if (st === 'answered') $('incallState').textContent = 'Bağlanıyor…';
+        else if (st === 'connected') {
+          $('incallState').textContent = 'Konuşuyorsunuz';
+          startedAt = Date.now();
+          clearInterval(tick);
+          tick = setInterval(function () { var s = Math.floor((Date.now() - startedAt) / 1000); $('timer').textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); }, 500);
+        } else if (st === 'ended') {
+          clearInterval(tick); call = null; show('idle');
+          toast(why === 'noanswer' ? 'Tablet cevap vermedi' : why === 'rejected' ? 'Tablet aramayı reddetti' : why === 'remote' ? 'Tablet aramayı kapattı' : why === 'failed' || why === 'lost' ? 'Bağlantı koptu' : /^error/.test(why || '') ? 'Arama başlatılamadı' : 'Arama bitti');
+        }
+      }
+    });
+  };
   $('muteBtn').onclick = function () {
     muted = !muted;
     if (call && call._local) call._local.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
@@ -392,7 +438,7 @@
 
   if (!topic) { show('nosetup'); return; }
   startSub();
-  window.__takozBaba = { state: function () { return call ? call.state : pendingOffer ? 'incoming' : 'idle'; }, accept: function () { $('acceptBtn').click(); } };
+  window.__takozBaba = { state: function () { return call ? call.state : pendingOffer ? 'incoming' : 'idle'; }, accept: function () { $('acceptBtn').click(); }, dial: function () { $('dialBtn').click(); } };
 })();
 </script>
 </body>
