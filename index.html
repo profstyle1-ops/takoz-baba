@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Takoz Baba">
 <meta name="theme-color" content="#0b1730">
+<link rel="apple-touch-icon" href="icon.png">
 <title>Takoz Baba</title>
 <style>
   :root { --bg: #0b1730; --card: #13244a; --line: #24407a; --text: #eef4ff; --muted: #9db2d8; --cyan: #49d2ff; --green: #2fd27a; --red: #ff4d5e; }
@@ -44,14 +45,23 @@
   .big-name { font-size: 26px; font-weight: 700; margin: 0; }
   .timer { font-variant-numeric: tabular-nums; font-size: 34px; margin: 6px 0 18px; }
   [hidden] { display: none !important; }
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #06121f; border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; font-size: 15px; }
+  #vstage { position: fixed; inset: 0; background: #000; z-index: 5; }
+  #vremote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+  #vself { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 14px; width: 28vw; max-width: 150px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 14px; transform: scaleX(-1); border: 2px solid rgba(255,255,255,.85); background: #111; }
+  #vstage.nocam #vself { display: none; }
+  .vbar { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 16px max(20px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.75) 45%); text-align: center; }
+  .vbar .vinfo { font-size: 15px; margin-bottom: 12px; text-shadow: 0 1px 4px #000; }
+  .vbar .row button { padding: 14px 6px; font-size: 16px; font-weight: 600; background: rgba(255,255,255,.2); }
+  .vbar .row button.off { background: #fff; color: #222; }
+  .vbar .row button.red { background: var(--red); }
+  .toast { z-index: 6; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #06121f; border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; font-size: 15px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="face"><i></i><i></i><b></b></div>
-    <div><h1>Takoz Baba</h1><small id="sub">Tabletle sesli görüşme</small></div>
+    <div><h1>Takoz Baba</h1><small id="sub">Tabletle sesli ve görüntülü görüşme</small></div>
   </header>
 
   <section class="card" id="nosetup" hidden>
@@ -73,18 +83,22 @@
   <section class="card" id="idle" hidden>
     <div class="status"><span class="dot" id="dot"></span><span id="idleText">Bağlanıyor…</span></div>
     <p class="muted">Bu sayfa açıkken tablet aradığında burada çalar.</p>
-    <button class="big green" id="dialBtn">Tableti ara</button>
+    <div class="row">
+      <button class="big green" id="dialBtn">Tableti ara</button>
+      <button class="big green" id="dialVBtn">Görüntülü ara</button>
+    </div>
     <p class="muted" style="margin:8px 0 0;font-size:13px">Tablette Takoz uygulaması açık olmalı.</p>
   </section>
 
   <section class="card" id="incoming" hidden>
     <div class="ring"><div class="face"><i></i><i></i><b></b></div></div>
-    <p class="big-name"><span id="callerName">Takoz</span> arıyor</p>
+    <p class="big-name"><span id="callerName">Takoz</span> <span id="callKind">arıyor</span></p>
     <p class="muted">Çocuğun seninle konuşmak istiyor</p>
     <div class="row" style="margin-top:18px">
       <button class="big red" id="rejectBtn">Reddet</button>
       <button class="big green" id="acceptBtn">Cevapla</button>
     </div>
+    <button class="big" id="acceptAudioBtn" style="margin-top:12px" hidden>Kamerasız cevapla</button>
   </section>
 
   <section class="card" id="incall" hidden>
@@ -98,6 +112,18 @@
   </section>
 </div>
 <audio id="remote" autoplay playsinline></audio>
+<div id="vstage" hidden>
+  <video id="vremote" autoplay playsinline></video>
+  <video id="vself" autoplay playsinline muted></video>
+  <div class="vbar">
+    <div class="vinfo"><span id="vstate">Bağlanıyor…</span> <span id="vtimer"></span></div>
+    <div class="row">
+      <button id="vmute">Mikrofon</button>
+      <button id="vcam">Kamera</button>
+      <button class="red" id="vhang">Kapat</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast" hidden></div>
 <script>(function (root) {
   'use strict';
@@ -188,6 +214,36 @@
     });
   };
 
+  C.media = async function (video) {
+    var a = await C.mic();
+    if (!video) return a;
+    try {
+      var v = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } } });
+      v.getVideoTracks().forEach(function (t) { try { t.contentHint = 'motion'; } catch (e) {} a.addTrack(t); });
+    } catch (e) { a._camErr = (e && e.name) || 'kamera'; }
+    return a;
+  };
+
+  C.tune = function (pc) {
+    try {
+      pc.getSenders().forEach(function (s) {
+        if (!s.track || s.track.kind !== 'video' || !s.getParameters) return;
+        var p = s.getParameters();
+        if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+        p.encodings[0].maxBitrate = 700000;
+        p.encodings[0].maxFramerate = 24;
+        p.degradationPreference = 'balanced';
+        s.setParameters(p).catch(function () {});
+      });
+    } catch (e) {}
+  };
+
+  C.controls = function (call, getStream) {
+    call.setMic = function (on) { var s = getStream(); if (s) s.getAudioTracks().forEach(function (t) { t.enabled = on; }); };
+    call.setCam = function (on) { var s = getStream(); if (s) s.getVideoTracks().forEach(function (t) { t.enabled = on; }); };
+    call.hasCam = function () { var s = getStream(); return !!(s && s.getVideoTracks().length); };
+  };
+
   C.mic = async function () {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('mikrofon_api_yok');
     var last = null;
@@ -216,7 +272,8 @@
 
   C.dial = function (opts) {
     var topic = opts.topic, sig = topic + '-sig', id = C.id(), pc = null, stream = null, sub = null, done = false, timer = null, me = opts.from || 'tablet';
-    var call = { id: id, state: 'idle' };
+    var call = { id: id, state: 'idle', video: !!opts.video };
+    C.controls(call, function () { return stream; });
     function set(st, extra) { call.state = st; if (opts.onState) opts.onState(st, extra); }
     function cleanup() {
       done = true; clearTimeout(timer);
@@ -233,13 +290,16 @@
       try {
         set('starting');
         if (typeof RTCPeerConnection === 'undefined') throw new Error('webrtc_yok');
-        stream = await C.mic();
+        stream = await C.media(!!opts.video);
         call._local = stream;
+        if (done) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+        if (opts.onLocal) opts.onLocal(stream);
         pc = C.peer(opts.onRemote);
         stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+        if (opts.video && !stream.getVideoTracks().length) pc.addTransceiver('video', { direction: 'recvonly' });
         pc.onconnectionstatechange = function () {
           if (done) return;
-          if (pc.connectionState === 'connected') { clearTimeout(timer); set('connected'); }
+          if (pc.connectionState === 'connected') { clearTimeout(timer); C.tune(pc); set('connected'); }
           if (pc.connectionState === 'failed') { call.hangup('failed'); }
           if (pc.connectionState === 'disconnected') {
             setTimeout(function () { if (!done && pc.connectionState !== 'connected') call.hangup('lost'); }, 6000);
@@ -253,12 +313,12 @@
           } else if (m.t === 'reject') { cleanup(); set('ended', 'rejected'); }
           else if (m.t === 'bye') { cleanup(); set('ended', 'remote'); }
         });
-        var offer = await pc.createOffer({ offerToReceiveAudio: true });
+        var offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: !!opts.video });
         await pc.setLocalDescription(offer);
         await C.waitIce(pc, 2500);
         if (done) return;
         var packed = await C.pack(pc.localDescription.sdp);
-        var pr = await C.publish(sig, { t: 'offer', id: id, from: me, n: opts.name || 'Takoz', s: packed.d, z: packed.z, at: Date.now() });
+        var pr = await C.publish(sig, { t: 'offer', id: id, from: me, n: opts.name || 'Takoz', v: opts.video ? 1 : 0, s: packed.d, z: packed.z, at: Date.now() });
         if (pr && pr.ok === false) throw new Error('ntfy ' + pr.status);
         set('ringing');
         if (opts.ring) opts.ring(id);
@@ -272,7 +332,9 @@
 
   C.answer = function (opts) {
     var topic = opts.topic, sig = topic + '-sig', pc = null, stream = null, done = false, offerMsg = opts.offer, me = opts.from || 'dad';
-    var call = { id: offerMsg.id, state: 'idle' };
+    var wantVideo = opts.video == null ? !!offerMsg.v : !!opts.video;
+    var call = { id: offerMsg.id, state: 'idle', video: wantVideo };
+    C.controls(call, function () { return stream; });
     function set(st, extra) { call.state = st; if (opts.onState) opts.onState(st, extra); }
     function cleanup() {
       done = true;
@@ -289,19 +351,21 @@
       try {
         set('starting');
         if (typeof RTCPeerConnection === 'undefined') throw new Error('webrtc_yok');
-        stream = await C.mic();
+        stream = await C.media(wantVideo);
         call._local = stream;
+        if (done) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+        if (opts.onLocal) opts.onLocal(stream);
         pc = C.peer(opts.onRemote);
-        stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
         pc.onconnectionstatechange = function () {
           if (done) return;
-          if (pc.connectionState === 'connected') set('connected');
+          if (pc.connectionState === 'connected') { C.tune(pc); set('connected'); }
           if (pc.connectionState === 'failed') call.hangup('failed');
           if (pc.connectionState === 'disconnected') {
             setTimeout(function () { if (!done && pc.connectionState !== 'connected') call.hangup('lost'); }, 6000);
           }
         };
         await pc.setRemoteDescription({ type: 'offer', sdp: await C.unpack({ z: offerMsg.z, d: offerMsg.s }) });
+        stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
         var ans = await pc.createAnswer();
         await pc.setLocalDescription(ans);
         await C.waitIce(pc, 2500);
@@ -349,6 +413,36 @@
     if (navigator.vibrate) navigator.vibrate([300, 200, 300]);
   }
   function stopRing() { clearInterval(ringer); ringer = null; }
+  function fmt(s) { return ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); }
+  function playEl(el) { var p = el.play(); if (p && p.catch) p.catch(function () {}); }
+  function stageOn(video) {
+    $('vstage').hidden = !video;
+    $('vstage').classList.remove('nocam');
+    $('vmute').classList.remove('off'); $('vmute').textContent = 'Mikrofon';
+    $('vcam').classList.remove('off'); $('vcam').textContent = 'Kamera';
+    $('vstate').textContent = 'Bağlanıyor…'; $('vtimer').textContent = '';
+  }
+  function stageOff() {
+    $('vstage').hidden = true;
+    $('vremote').srcObject = null; $('vself').srcObject = null; $('remote').srcObject = null;
+  }
+  function onRemote(video) {
+    return function (s) {
+      if (video) { $('remote').srcObject = null; var v = $('vremote'); v.srcObject = s; v.muted = false; playEl(v); }
+      else { var a = $('remote'); a.srcObject = s; playEl(a); }
+    };
+  }
+  function onLocal(s) {
+    if ($('vstage').hidden) return;
+    if (!s.getVideoTracks().length) { $('vstage').classList.add('nocam'); return; }
+    $('vself').srcObject = s; playEl($('vself'));
+  }
+  function liveState(text) {
+    $('incallState').textContent = text; $('vstate').textContent = text;
+    startedAt = Date.now();
+    clearInterval(tick);
+    tick = setInterval(function () { var t = fmt(Math.floor((Date.now() - startedAt) / 1000)); $('timer').textContent = t; $('vtimer').textContent = t; }, 500);
+  }
 
   function onSignal(m) {
     if (m.t === 'offer') {
@@ -357,6 +451,8 @@
       if (wantId && m.id !== wantId && pendingOffer) return;
       pendingOffer = m;
       $('callerName').textContent = m.n || 'Takoz';
+      $('callKind').textContent = m.v ? 'görüntülü arıyor' : 'arıyor';
+      $('acceptAudioBtn').hidden = !m.v;
       show('incoming');
       stopRing(); beep(); ringer = setInterval(beep, 2000);
       setTimeout(function () { if (pendingOffer === m) { pendingOffer = null; stopRing(); show('idle'); toast('Cevapsız arama'); } }, 60000);
@@ -383,62 +479,73 @@
     TakozCall.publish(topic + '-sig', { t: 'reject', id: pendingOffer.id, from: 'dad' });
     pendingOffer = null; stopRing(); show('idle');
   };
-  $('acceptBtn').onclick = function () {
+  function accept(withCam) {
     if (!pendingOffer) return;
     var m = pendingOffer; pendingOffer = null; handled[m.id] = 1; stopRing();
+    var video = !!m.v;
     $('incallName').textContent = m.n || 'Takoz'; $('incallState').textContent = 'Bağlanıyor…'; $('timer').textContent = '00:00';
-    show('incall');
+    show('incall'); stageOn(video);
     var audio = $('remote');
-    audio.muted = false; try { audio.play(); } catch (e) {}
+    audio.muted = false;
     call = TakozCall.answer({
-      topic: topic, offer: m,
-      onRemote: function (s) { audio.srcObject = s; var p = audio.play(); if (p && p.catch) p.catch(function () {}); },
+      topic: topic, offer: m, video: video && withCam,
+      onRemote: onRemote(video), onLocal: onLocal,
       onState: function (st, why) {
         if (st === 'connected') {
-          $('incallState').textContent = 'Konuşuyorsunuz';
-          startedAt = Date.now();
-          clearInterval(tick);
-          tick = setInterval(function () { var s = Math.floor((Date.now() - startedAt) / 1000); $('timer').textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); }, 500);
+          liveState('Konuşuyorsunuz');
         } else if (st === 'ended') {
-          clearInterval(tick); call = null; show('idle');
+          clearInterval(tick); call = null; stageOff(); show('idle');
           toast(why === 'remote' ? 'Tablet aramayı kapattı' : why === 'failed' || why === 'lost' ? 'Bağlantı koptu' : 'Arama bitti');
         }
       }
     });
   };
+  $('acceptBtn').onclick = function () { accept(true); };
+  $('acceptAudioBtn').onclick = function () { accept(false); };
   $('hangBtn').onclick = function () { if (call) call.hangup(); };
-  $('dialBtn').onclick = function () {
+  $('vhang').onclick = function () { if (call) call.hangup(); else stageOff(); };
+  function dial(video) {
     if (call || pendingOffer) return;
     $('incallName').textContent = 'Tablet'; $('incallState').textContent = 'Tablet çalıyor…'; $('timer').textContent = '00:00';
-    show('incall');
+    show('incall'); stageOn(video); $('vstate').textContent = 'Tablet çalıyor…';
     var audio = $('remote');
-    audio.muted = false; try { audio.play(); } catch (e) {}
+    audio.muted = false;
     call = TakozCall.dial({
-      topic: topic, from: 'dad', name: 'Baban', timeout: 55000,
-      onRemote: function (s) { audio.srcObject = s; var p = audio.play(); if (p && p.catch) p.catch(function () {}); },
+      topic: topic, from: 'dad', name: 'Baban', timeout: 55000, video: video,
+      onRemote: onRemote(video), onLocal: onLocal,
       onState: function (st, why) {
-        if (st === 'answered') $('incallState').textContent = 'Bağlanıyor…';
+        if (st === 'answered') { $('incallState').textContent = 'Bağlanıyor…'; $('vstate').textContent = 'Bağlanıyor…'; }
         else if (st === 'connected') {
-          $('incallState').textContent = 'Konuşuyorsunuz';
-          startedAt = Date.now();
-          clearInterval(tick);
-          tick = setInterval(function () { var s = Math.floor((Date.now() - startedAt) / 1000); $('timer').textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); }, 500);
+          liveState('Konuşuyorsunuz');
         } else if (st === 'ended') {
-          clearInterval(tick); call = null; show('idle');
+          clearInterval(tick); call = null; stageOff(); show('idle');
           toast(why === 'noanswer' ? 'Tablet cevap vermedi' : why === 'rejected' ? 'Tablet aramayı reddetti' : why === 'remote' ? 'Tablet aramayı kapattı' : why === 'failed' || why === 'lost' ? 'Bağlantı koptu' : /^error/.test(why || '') ? 'Arama başlatılamadı' : 'Arama bitti');
         }
       }
     });
-  };
+  }
+  $('dialBtn').onclick = function () { dial(false); };
+  $('dialVBtn').onclick = function () { dial(true); };
   $('muteBtn').onclick = function () {
     muted = !muted;
     if (call && call._local) call._local.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
     $('muteBtn').textContent = muted ? 'Sesi aç' : 'Sessiz';
   };
+  $('vmute').onclick = function () {
+    if (!call || !call.setMic) return;
+    var off = !$('vmute').classList.contains('off');
+    call.setMic(!off); $('vmute').classList.toggle('off', off); $('vmute').textContent = off ? 'Mikrofon kapalı' : 'Mikrofon';
+  };
+  $('vcam').onclick = function () {
+    if (!call || !call.setCam) return;
+    var off = !$('vcam').classList.contains('off');
+    call.setCam(!off); $('vcam').classList.toggle('off', off); $('vcam').textContent = off ? 'Kamera kapalı' : 'Kamera';
+    $('vstage').classList.toggle('nocam', off);
+  };
 
   if (!topic) { show('nosetup'); return; }
   startSub();
-  window.__takozBaba = { state: function () { return call ? call.state : pendingOffer ? 'incoming' : 'idle'; }, accept: function () { $('acceptBtn').click(); }, dial: function () { $('dialBtn').click(); } };
+  window.__takozBaba = { state: function () { return call ? call.state : pendingOffer ? 'incoming' : 'idle'; }, accept: function () { $('acceptBtn').click(); }, dial: function () { $('dialBtn').click(); }, dialVideo: function () { $('dialVBtn').click(); } };
 })();
 </script>
 </body>
